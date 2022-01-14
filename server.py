@@ -116,4 +116,96 @@ def get_start_location(players):
 		if stop:
 			break
 	return (x,y)
+def threaded_client(conn, _id):
+	global connections, players, balls, game_time, nxt, start
 
+	current_id = _id
+
+	data = conn.recv(16)
+	name = data.decode("utf-8")
+	print("[LOG]", name, "connected to the server.")
+
+	color = colors[current_id]
+	x, y = get_start_location(players)
+	players[current_id] = {"x":x, "y":y,"color":color,"score":0,"name":name}  # x, y color, score, name
+
+	conn.send(str.encode(str(current_id)))
+
+	while True:
+
+		if start:
+			game_time = round(time.time()-start_time)
+			if game_time >= ROUND_TIME:
+				start = False
+			else:
+				if game_time // MASS_LOSS_TIME == nxt:
+					nxt += 1
+					release_mass(players)
+					print(f"[GAME] {name}'s Mass depleting")
+		try:
+			# Recieve data from client
+			data = conn.recv(32)
+
+			if not data:
+				break
+
+			data = data.decode("utf-8")
+			if data.split(" ")[0] == "move":
+				split_data = data.split(" ")
+				x = int(split_data[1])
+				y = int(split_data[2])
+				players[current_id]["x"] = x
+				players[current_id]["y"] = y
+
+				if start:
+					check_collision(players, balls)
+					player_collision(players)
+
+				if len(balls) < 150:
+					create_balls(balls, random.randrange(100,150))
+					print("[GAME] Generating more orbs")
+
+				send_data = pickle.dumps((balls,players, game_time))
+
+			elif data.split(" ")[0] == "id":
+				send_data = str.encode(str(current_id)) 
+
+			elif data.split(" ")[0] == "jump":
+				send_data = pickle.dumps((balls,players, game_time))
+			else:
+				send_data = pickle.dumps((balls,players, game_time))
+
+			conn.send(send_data)
+
+		except Exception as e:
+			print(e)
+			break  #
+
+		time.sleep(0.001)
+
+	print("[DISCONNECT] Name:", name, ", Client Id:", current_id, "disconnected")
+
+	connections -= 1 
+	del players[current_id]
+	conn.close()  
+
+create_balls(balls, random.randrange(200,250))
+
+print("[GAME] Setting up level")
+print("[SERVER] Waiting for connections")
+
+while True:
+	
+	host, addr = S.accept()
+	print("[CONNECTION] Connected to:", addr)
+
+	if addr[0] == SERVER_IP and not(start):
+		start = True
+		start_time = time.time()
+		print("[STARTED] Game Started")
+
+	connections += 1
+	start_new_thread(threaded_client,(host,_id))
+	_id += 1
+
+print("[SERVER] Server offline")
