@@ -32,3 +32,88 @@ except socket.error as e:
 S.listen()  
  
 print(f"[SERVER] Server Started with local ip {SERVER_IP}") 
+
+players = {}
+balls = []
+connections = 0
+_id = 0
+colors = [(255,0,0), (255, 128, 0), (255,255,0), (128,255,0),(0,255,0),(0,255,128),(0,255,255),(0, 128, 255), (0,0,255), (0,0,255), (128,0,255),(255,0,255), (255,0,128),(128,128,128), (0,0,0)]
+start = False
+stat_time = 0
+game_time = "Starting Soon"
+nxt = 1
+
+
+def release_mass(players):
+	for player in players:
+		p = players[player]
+		if p["score"] > 8:
+			p["score"] = math.floor(p["score"]*0.95)
+
+
+def check_collision(players, balls):
+	to_delete = []
+	for player in players:
+		p = players[player]
+		x = p["x"]
+		y = p["y"]
+		for ball in balls:
+			bx = ball[0]
+			by = ball[1]
+
+			dis = math.sqrt((x - bx)**2 + (y-by)**2)
+			if dis <= START_RADIUS + p["score"]:
+				p["score"] = p["score"] + 0.5
+				balls.remove(ball)
+
+
+def player_collision(players):
+	sort_players = sorted(players, key=lambda x: players[x]["score"])
+	for x, player1 in enumerate(sort_players):
+		for player2 in sort_players[x+1:]:
+			p1x = players[player1]["x"]
+			p1y = players[player1]["y"]
+
+			p2x = players[player2]["x"]
+			p2y = players[player2]["y"]
+
+			dis = math.sqrt((p1x - p2x)**2 + (p1y-p2y)**2)
+			if dis < players[player2]["score"] - players[player1]["score"]*0.85:
+				players[player2]["score"] = math.sqrt(players[player2]["score"]**2 + players[player1]["score"]**2) # adding areas instead of radii
+				players[player1]["score"] = 0
+				players[player1]["x"], players[player1]["y"] = get_start_location(players)
+				print(f"[GAME] " + players[player2]["name"] + " ATE " + players[player1]["name"])
+
+
+def create_balls(balls, n):
+	for i in range(n):
+		while True:
+			stop = True
+			x = random.randrange(0,W)
+			y = random.randrange(0,H)
+			for player in players:
+				p = players[player]
+				dis = math.sqrt((x - p["x"])**2 + (y-p["y"])**2)
+				if dis <= START_RADIUS + p["score"]:
+					stop = False
+			if stop:
+				break
+
+		balls.append((x,y, random.choice(colors)))
+
+
+def get_start_location(players):
+	while True:
+		stop = True
+		x = random.randrange(0,W)
+		y = random.randrange(0,H)
+		for player in players:
+			p = players[player]
+			dis = math.sqrt((x - p["x"])**2 + (y-p["y"])**2)
+			if dis <= START_RADIUS + p["score"]:
+				stop = False
+				break
+		if stop:
+			break
+	return (x,y)
+
