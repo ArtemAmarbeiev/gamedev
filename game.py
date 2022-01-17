@@ -21,6 +21,35 @@ COLORS = [(255,0,0), (255, 128, 0), (255,255,0), (128,255,0),(0,255,0),(0,255,12
 players = {}
 balls = []
 
+def collision(rleft, rtop, width, height,   
+              center_x, center_y, radius): 
+    """ Detect collision between a rectangle and circle. """
+
+    rright, rbottom = rleft + width/2, rtop + height/2
+
+    cleft, ctop     = center_x-radius, center_y-radius
+    cright, cbottom = center_x+radius, center_y+radius
+
+    if rright < cleft or rleft > cright or rbottom < ctop or rtop > cbottom:
+        return False  
+
+    for x in (rleft, rleft+width):
+        for y in (rtop, rtop+height):
+            if math.hypot(x-center_x, y-center_y) <= radius:
+                return True  
+
+    if rleft <= center_x <= rright and rtop <= center_y <= rbottom:
+        return True  
+
+    return False 
+
+zones = []
+zones.append(pygame.Rect((0, 0, W // 2 - 1, H // 2 - 1)))
+zones.append(pygame.Rect((W // 2, 0, W // 2, H // 2)))
+
+zones.append(pygame.Rect((0, H // 2, W // 2 - 1, H // 2 - 1)))
+zones.append(pygame.Rect((W // 2, H // 2, W // 2 - 1, H // 2 - 1)))
+
 # FUNCTIONS
 def convert_time(t):
 	if type(t) == str:
@@ -38,7 +67,7 @@ def convert_time(t):
 		return minutes + ":" + seconds
 
 
-def redraw_window(players, balls, game_time, score):
+def redraw_window(players, balls, game_time, score, zone, local):
 	WIN.fill((255,255,255)) # fill screen white, to clear old frames
 	for ball in balls:
 		pygame.draw.circle(WIN, ball[2], (ball[0], ball[1]), BALL_RADIUS)
@@ -46,10 +75,23 @@ def redraw_window(players, balls, game_time, score):
 	# draw each player in the list
 	for player in sorted(players, key=lambda x: players[x]["score"]):
 		p = players[player]
-		pygame.draw.circle(WIN, p["color"], (p["x"], p["y"]), PLAYER_RADIUS + round(p["score"]))
-		# render and draw name for each player
-		text = NAME_FONT.render(p["name"], 1, (0,0,0))
-		WIN.blit(text, (p["x"] - text.get_width()/2, p["y"] - text.get_height()/2))
+			if p == local:
+			pygame.draw.circle(WIN, p["color"], (p["x"], p["y"]), PLAYER_RADIUS + round(p["score"]))
+            # render and draw name for each player
+			text = NAME_FONT.render(p["name"], 1, (0,0,0))
+			WIN.blit(text, (p["x"] - text.get_width()/2, p["y"] - text.get_height()/2))
+		else:
+			if not "zone" in p:
+				p["zone"] = 0
+            
+			if p["zone"] == zone:
+				pygame.draw.circle(WIN, p["color"], (p["x"], p["y"]), PLAYER_RADIUS + round(p["score"]))
+                # render and draw name for each player	
+				text = NAME_FONT.render(p["name"], 1, (0,0,0))
+				WIN.blit(text, (p["x"] - text.get_width()/2, p["y"] - text.get_height()/2))
+
+	
+
 
 	# draw scoreboard
 	sort_players = list(reversed(sorted(players, key=lambda x: players[x]["score"])))
@@ -104,8 +146,16 @@ def main(name):
 		if keys[pygame.K_DOWN] or keys[pygame.K_s]:
 			if player["y"] + vel + PLAYER_RADIUS + player["score"] <= H:
 				player["y"] = player["y"] + vel
+						for i in range(len(zones)):
+		if collision(zones[i].x,
+				zones[i].y, zones[i].width, zones[i].height, player["x"], player["y"], PLAYER_RADIUS + round(player["score"])):
+				player["zone"] = i
+                
+		if not "zone" in player:
+			player["zone"] = 0
+				
 
-		data = "move " + str(player["x"]) + " " + str(player["y"])
+		data = "move " + str(player["x"]) + " " + str(player["y"]) + " " + str(player["zone"])
 
 		balls, players, game_time = server.send(data)
 
@@ -118,7 +168,7 @@ def main(name):
 					run = False
 
 
-		redraw_window(players, balls, game_time, player["score"])
+		redraw_window(players, balls, game_time, player["score"], player["zone"], player)
 		pygame.display.update()
 
 
