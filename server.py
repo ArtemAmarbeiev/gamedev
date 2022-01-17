@@ -4,7 +4,8 @@ import _pickle as pickle
 import time 
 import random 
 import math 
- 
+import pygame
+
 S = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
 S.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
  
@@ -16,8 +17,37 @@ START_RADIUS = 7
 ROUND_TIME = 60 * 5 
  
 MASS_LOSS_TIME = 7 
+PLAYER_RADIUS = 10
  
-W, H = 1600, 830 
+W, H = 1600, 840 
+zones = []
+zones.append(pygame.Rect((0, 0, W // 2 - 1, H // 2 - 1)))
+zones.append(pygame.Rect((W // 2, 0, W // 2, H // 2)))
+
+zones.append(pygame.Rect((0, H // 2, W // 2 - 1, H // 2 - 1)))
+zones.append(pygame.Rect((W // 2, H // 2, W // 2 - 1, H // 2 - 1)))
+
+def collision(rleft, rtop, width, height,   
+              center_x, center_y, radius): 
+    """ Detect collision between a rectangle and circle. """
+
+    rright, rbottom = rleft + width/2, rtop + height/2
+
+    cleft, ctop     = center_x-radius, center_y-radius
+    cright, cbottom = center_x+radius, center_y+radius
+
+    if rright < cleft or rleft > cright or rbottom < ctop or rtop > cbottom:
+        return False  
+
+    for x in (rleft, rleft+width):
+        for y in (rtop, rtop+height):
+            if math.hypot(x-center_x, y-center_y) <= radius:
+                return True  
+
+    if rleft <= center_x <= rright and rtop <= center_y <= rbottom:
+        return True  
+
+    return False 
  
 HOST_NAME = socket.gethostname() 
 SERVER_IP = socket.gethostbyname(HOST_NAME) 
@@ -107,6 +137,11 @@ def get_start_location(players):
 		stop = True
 		x = random.randrange(0,W)
 		y = random.randrange(0,H)
+		zone = 0
+		for i in range(len(zones)):
+			if collision(zones[i].x,
+						zones[i].y, zones[i].width, zones[i].height, x, y, PLAYER_RADIUS):
+				zone = i
 		for player in players:
 			p = players[player]
 			dis = math.sqrt((x - p["x"])**2 + (y-p["y"])**2)
@@ -115,7 +150,7 @@ def get_start_location(players):
 				break
 		if stop:
 			break
-	return (x,y)
+	return (x,y,zone)
 def threaded_client(conn, _id):
 	global connections, players, balls, game_time, nxt, start
 
@@ -126,8 +161,8 @@ def threaded_client(conn, _id):
 	print("[LOG]", name, "connected to the server.")
 
 	color = colors[current_id]
-	x, y = get_start_location(players)
-	players[current_id] = {"x":x, "y":y,"color":color,"score":0,"name":name}  # x, y color, score, name
+	x, y, zone = get_start_location(players)
+	players[current_id] = {"x":x, "y":y,"color":color,"score":0,"name":name,"zone":zone}  # x, y color, score, name, zone
 
 	conn.send(str.encode(str(current_id)))
 
@@ -154,8 +189,10 @@ def threaded_client(conn, _id):
 				split_data = data.split(" ")
 				x = int(split_data[1])
 				y = int(split_data[2])
+				zone = int(split_data[3])
 				players[current_id]["x"] = x
 				players[current_id]["y"] = y
+				players[current_id]["zone"] = zone
 
 				if start:
 					check_collision(players, balls)
